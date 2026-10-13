@@ -1,0 +1,7 @@
+.venv/*
+*.pdf
+*.xlsx
+credentials.json
+processed_sheets.txt
+processed.txt
+toadd.json
