@@ -136,14 +136,14 @@ def parse_excel(path):
 # ── Categories ─────────────────────────────────────────────────────────────
 
 CAT = [
-    ("Sports & Leisure",    ["extremevital","steam","eventim","sportvision","sport"]),
-    ("Auto & Transport",    ["petrol","inamarket","bsmol","tamoil","zminj","autopark",
+    ("Šport & Prosti čas",    ["extremevital","steam","eventim","sportvision","sport"]),
+    ("Avto & Prevozi",        ["petrol","inamarket","bsmol","tamoil","zminj","autopark",
                                "petrolio","span","drivr","uber","wallismotor","sixt",
                                "sixinz","europeanpark","petrolm","euroam","motocenter"]),
-    ("Home",                ["suncontract","rtvslovenija","teleslovenija","telemach",
+    ("Dom",                   ["suncontract","rtvslovenija","teleslovenija","telemach",
                                "komunalne","slodkovec","sodis"]),
-    ("Finance & Insurance", ["zavarovalnica","zavarov"]),
-    ("Cafes & Restaurants", ["kavarna","brunch","restavracija","restaurant","boreka",
+    ("Finance & Zavarovanja", ["zavarovalnica","zavarov"]),
+    ("Kavarne & Restavracije",["kavarna","brunch","restavracija","restaurant","boreka",
                                "laturka","burek","lahocolate","chutis","hoodburger",
                                "domacapeka","nyhavn38","ubereats","wolt","foetex",
                                "belacenter","pressbyran","skastnmalmo","twoforks",
@@ -155,7 +155,7 @@ def categorize(desc):
     for cat, kws in CAT:
         if any(k in d for k in kws):
             return cat
-    return "Purchases"
+    return "Nakupi"
 
 # ── Google Sheets Logic ───────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ def insert_all_gsheet(ws, items):
 
 def make_row_list(t):
     d, v, cur, desc = t["d"], t["v"], t["cur"], t["desc"]
-    txt  = f"PURCHASE {desc} {v:,.2f} {cur}".replace(",", " ")
+    txt  = f"NAKUP {desc} {v:,.2f} {cur}".replace(",", " ")
     sign = "+" if t["neg"] else "-"
     # Row contains: [Description, Category, Sign, Amount, Currency, Date, + empty columns]
     return [txt, t["cat"], sign, round(v, 2), cur, fd(d), "", "", "", "", "", "", "", "", "", ""]
