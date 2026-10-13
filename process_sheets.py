@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-process_sheets.py — Samodejna obdelava PDF-jev in vnos v Google Sheets
+process_sheets.py — Automatic PDF processing and entry into Google Sheets
 ====================================================================
-Uporaba:
-  1. Postavi credentials.json (iz Google Cloud)
-  2. Dodaj email service accounta v Share Google tabele
-  3. Kopiraj PDF v mapo 'izpiski'
-  4. Pritisni:  python process_sheets.py
+Usage:
+  1. Place credentials.json (from Google Cloud) in the directory
+  2. Add the service account email to the Share settings of your Google Sheet
+  3. Copy PDFs into the 'izpiski' folder
+  4. Run:  python process_sheets.py
 """
 import re, os, sys, unicodedata, shutil, traceback
 from datetime import date, timedelta
@@ -21,19 +21,19 @@ DIR          = os.path.dirname(os.path.abspath(__file__))
 os.chdir(DIR)
 sys.stdout.reconfigure(encoding="utf-8")
 
-# ── Konfiguracija ──────────────────────────────────────────────────────────
+# ── Configuration ──────────────────────────────────────────────────────────
 PDF_PREFIX     = "Izpisek_"
 SUBDIR         = "izpiski"
 STATE_FILE     = "processed_sheets.txt"
-SHEET_NAME     = "transakcije"      # Ime taba v Google tabeli
+SHEET_NAME     = "transakcije"      # Name of the tab in Google Sheets
 GOOGLE_SHEET_ID = "1JIAfmNICTokIzNeQ5OV17nnVhopUkESG9GnSgywGUGQ"
 CREDENTIALS_FILE = "credentials.json"
 
-# Konfiguracija za Excel (osnovni račun)
+# Configuration for Excel (base account)
 EXCEL_PATTERN  = r"Transakcije \(\d+\)\.xlsx"
 # ────────────────────────────────────────────────────────────────────────────
 
-# ── Pomožne funkcije (Parsing & Kategorizacija) ────────────────────────────
+# ── Helper Functions (Parsing & Categorization) ────────────────────────────
 
 def load_processed():
     if os.path.exists(STATE_FILE):
@@ -57,7 +57,7 @@ def norm(s):
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn").lower()
     return re.sub(r"[^a-z0-9]", "", s)
 
-# ── PDF parsanje ───────────────────────────────────────────────────────────
+# ── PDF Parsing ───────────────────────────────────────────────────────────
 
 RX = re.compile(r"^(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*,\d{2})(?:[+\-])?\s*$")
 SKIP = ["BERNARD","VISAPREMIUM","VISA_PREMIUM","474819","OŽIJEK","OZIJEK","PORABA",
@@ -86,36 +86,36 @@ def parse_pdf(path):
     return out
 
 def parse_excel(path):
-    """Parsa Excel datoteko s transakcijami računa."""
+    """Parses Excel file with account transactions."""
     out = []
     try:
         wb = openpyxl.load_workbook(path, data_only=True)
         sheet = wb.active
-        # Preberi vse podatke iz aktivnega lista
+        # Read all data from the active sheet
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            # Struktura: A=Datum, B=Opis, C=Znesek (glede na prejšnje razgovore)
-            # row[0]=Datum, row[1]=Opis, row[2]=Znesek
+            # Structure: A=Date, B=Description, C=Amount (based on previous conversations)
+            # row[0]=Date, row[1]=Description, row[2]=Amount
             if not row or row[0] is None: continue
             
             try:
-                # Datumska obdelava (Excel lahko vrne datetime objekt)
-                # Excel stolpci: A=Namen, B=Kategorija, C=+/- , D=Znesek, E=Valuta, F=Datum
+                # Date processing (Excel can return datetime object)
+                # Excel columns: A=Purpose, B=Category, C=+/- , D=Amount, E=Currency, F=Date
                 dt_val = row[5]
                 if isinstance(dt_val, date):
                     d = dt_val
                 else:
-                    # Če je string, poskušaj parsati (npr. 23. 3. 2026)
+                    # If it's a string, try to parse (e.g., 23. 3. 2026)
                     p = [int(x) for x in re.findall(r"\d+", str(dt_val))]
                     d = date(p[2], p[1], p[0]) if len(p) >= 3 else None
                 
                 if not d:
-                    print(f"    [DEBUG] Neznan datum: {dt_val}")
+                    print(f"    [DEBUG] Unknown date: {dt_val}")
                     continue
 
                 desc = str(row[0]).strip() if row[0] else ""
                 v_val = row[3]
                 if v_val is None:
-                    print(f"    [DEBUG] Prazn znesek v vrstici: {row}")
+                    print(f"    [DEBUG] Empty amount in row: {row}")
                     continue
                 v = float(str(v_val).replace(",", "."))
                 
@@ -123,27 +123,27 @@ def parse_excel(path):
                     "d":    d,
                     "desc": desc,
                     "v":    v,
-                    "cur":  "EUR",  # Excel običajno nima valute v stolpcu, predpostavljamo EUR
-                    "neg":  v < 0,  # Če je znesek negativ way, je to izdatki
+                    "cur":  "EUR",  # Excel usually doesn't have currency in a column, assuming EUR
+                    "neg":  v < 0,  # If amount is negative, it's an expense
                 })
             except Exception as e:
-                print(f"    [DEBUG] Napaka v vrstici {row}: {e}")
+                print(f"    [DEBUG] Error in row {row}: {e}")
                 continue
     except Exception as e:
-        print(f"  ☒  Napaka pri branju Excelja {path}: {e}")
+        print(f"  ☒  Error reading Excel {path}: {e}")
     return out
 
-# ── Kategorije ─────────────────────────────────────────────────────────────
+# ── Categories ─────────────────────────────────────────────────────────────
 
 CAT = [
-    ("Šport & Prosti čas",    ["extremevital","steam","eventim","sportvision","sport"]),
-    ("Avto & Prevozi",        ["petrol","inamarket","bsmol","tamoil","zminj","autopark",
+    ("Sports & Leisure",    ["extremevital","steam","eventim","sportvision","sport"]),
+    ("Auto & Transport",    ["petrol","inamarket","bsmol","tamoil","zminj","autopark",
                                "petrolio","span","drivr","uber","wallismotor","sixt",
                                "sixinz","europeanpark","petrolm","euroam","motocenter"]),
-    ("Dom",                   ["suncontract","rtvslovenija","teleslovenija","telemach",
+    ("Home",                ["suncontract","rtvslovenija","teleslovenija","telemach",
                                "komunalne","slodkovec","sodis"]),
-    ("Finance & Zavarovanja", ["zavarovalnica","zavarov"]),
-    ("Kavarne & Restavracije",["kavarna","brunch","restavracija","restaurant","boreka",
+    ("Finance & Insurance", ["zavarovalnica","zavarov"]),
+    ("Cafes & Restaurants", ["kavarna","brunch","restavracija","restaurant","boreka",
                                "laturka","burek","lahocolate","chutis","hoodburger",
                                "domacapeka","nyhavn38","ubereats","wolt","foetex",
                                "belacenter","pressbyran","skastnmalmo","twoforks",
@@ -155,15 +155,15 @@ def categorize(desc):
     for cat, kws in CAT:
         if any(k in d for k in kws):
             return cat
-    return "Nakupi"
+    return "Purchases"
 
-# ── Google Sheets Logika ───────────────────────────────────────────────────
+# ── Google Sheets Logic ───────────────────────────────────────────────────
 
 def get_gsheet_client():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets',
              "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     if not os.path.exists(CREDENTIALS_FILE):
-        print(f"☒  Ni datoteke {CREDENTIALS_FILE}! Postavi jo iz Google Cloud konzole.")
+        print(f"☒  File {CREDENTIALS_FILE} not found! Place it from Google Cloud console.")
         sys.exit(1)
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
     return gspread.authorize(creds)
@@ -198,7 +198,7 @@ def already_exists_gsheet(t, keyed, amt_counter):
 
 def insert_all_gsheet(ws, items):
     n = 0
-    # 1 · Preberi vse obstoječe podatke enkrat
+    # 1 · Read all existing data once
     all_rows = ws.get_all_values()
     
     if not all_rows:
@@ -211,7 +211,7 @@ def insert_all_gsheet(ws, items):
     header = all_rows[0]
     data = all_rows[1:]
 
-    # 2 · Pripravi obstoječe vrstice z datumi za sortiranje
+    # 2 · Prepare existing rows with dates for sorting
     rows_with_dates = []
     for row in data:
         d_val = pd(row[5]) if len(row) > 5 else None
@@ -219,19 +219,19 @@ def insert_all_gsheet(ws, items):
             d_val = date(1, 1, 1)
         rows_with_dates.append((d_val, row))
 
-    # 3 · Pripravi nove vrstice z datumi
+    # 3 · Prepare new rows with dates
     new_rows_with_dates = []
     for t in items:
         new_rows_with_dates.append((t["d"], make_row_list(t)))
 
-    # 4 · Združi in razvrsti vse po datumu
+    # 4 · Merge and sort all by date
     combined = rows_with_dates + new_rows_with_dates
     combined.sort(key=lambda x: x[0])
 
-    # 5 · Izvzemi samo vrednosti vrstic
+    # 5 · Extract only row values
     final_data = [header] + [item[1] for item in combined]
 
-    # 6 · Ponastavi tabelo in vnesi vse podatke z enim zahtevkom (Batch Update)
+    # 6 · Reset table and insert all data with one request (Batch Update)
     ws.clear()
     ws.update('A1', final_data)
     
@@ -239,42 +239,42 @@ def insert_all_gsheet(ws, items):
 
 def make_row_list(t):
     d, v, cur, desc = t["d"], t["v"], t["cur"], t["desc"]
-    txt  = f"NAKUP {desc} {v:,.2f} {cur}".replace(",", " ")
+    txt  = f"PURCHASE {desc} {v:,.2f} {cur}".replace(",", " ")
     sign = "+" if t["neg"] else "-"
-    # Vrstica vsebuje: [Opis, Kategorija, Znak, Znesek, Valuta, Datum, + praznih stolpcev]
+    # Row contains: [Description, Category, Sign, Amount, Currency, Date, + empty columns]
     return [txt, t["cat"], sign, round(v, 2), cur, fd(d), "", "", "", "", "", "", "", "", "", ""]
 
-# ── Glavni program ─────────────────────────────────────────────────────────
+# ── Main Program ─────────────────────────────────────────────────────────
 
 def main():
     print("\n" + "=" * 52)
-    print(" KARTIČNI IZPISKI — GOOGLE SHEETS")
+    print(" CARD STATEMENTS — GOOGLE SHEETS")
     print("=" * 52)
 
     client = get_gsheet_client()
 
-    # 3 · Odpri Excel (Google Sheets)
+    # 3 · Open Excel (Google Sheets)
     try:
-        print(f"  ... poskušam odpreti tabelo preko ID-ja {GOOGLE_SHEET_ID} ...")
+        print(f"  ... attempting to open sheet via ID {GOOGLE_SHEET_ID} ...")
         spreadsheet = client.open_by_key(GOOGLE_SHEET_ID)
-        print(f"  ✓  Tabela odprta.")
+        print(f"  ✓  Spreadsheet opened.")
         
-        # Izpiši vse razpoložljive tabe (worksheets)
+        # Print all available worksheets
         all_worksheets = [sh.title for sh in spreadsheet.worksheets()]
-        print(f"  ℹ  Razpoložljivi tabi v tej tabeli: {all_worksheets}")
+        print(f"  ℹ  Available worksheets in this spreadsheet: {all_worksheets}")
         
         try:
             ws = spreadsheet.worksheet(SHEET_NAME)
-            print(f"  ✓  Tab '{SHEET_NAME}' najden.")
+            print(f"  ✓  Tab '{SHEET_NAME}' found.")
         except Exception as e:
-            print(f"  ☒  Napaka pri iskanju taba '{SHEET_NAME}': {e}")
-            print(f"     Preveri, če je ime taba v seznamu zgoraj pravilno.")
+            print(f"  ☒  Error finding tab '{SHEET_NAME}': {e}")
+            print(f"     Check if the tab name in the list above is correct.")
             return
 
     except Exception as e:
-        print(f"☒  Napaka pri dostopu do Google tabele: {e}")
+        print(f"☒  Error accessing Google Sheet: {e}")
         traceback.print_exc()
-        print(f"     Preveri, če je ID '{GOOGLE_SHEET_ID}' pravilno zapisan in ali si Service Accountu dal dostop (Share).")
+        print(f"     Check if ID '{GOOGLE_SHEET_ID}' is correct and if you have given access to the Service Account (Share).")
         return
 
     all_pdfs = sorted(f for f in os.listdir(os.path.join(DIR, SUBDIR))
@@ -283,29 +283,29 @@ def main():
     new_pdfs  = [p for p in all_pdfs if p not in processed]
 
     if not new_pdfs:
-        print("  ✓  Ni novih PDF-jev za obdelavo.")
+        print("  ✓  No new PDFs to process.")
         all_txns = []
     else:
-        print(f"  PDF-jev skupno : {len(all_pdfs)}")
-        print(f"  Novih (za obdelavo): {len(new_pdfs)}")
+        print(f"  Total PDFs: {len(all_pdfs)}")
+        print(f"  New (to process): {len(new_pdfs)}")
         all_txns = []
-        # 4 · PDF-ji
+        # 4 · PDFs
         for p in new_pdfs:
             txns = parse_pdf(os.path.join(DIR, SUBDIR, p))
-            print(f"  ✓  {p}: {len(txns)} transakcij")
+            print(f"  ✓  {p}: {len(txns)} transactions")
             all_txns.extend(txns)
 
-    # 4b · Excel (osnovni račun)
+    # 4b · Excel (base account)
     all_excels = sorted(f for f in os.listdir(DIR)
                         if f.lower().endswith(".xlsx") and re.match(EXCEL_PATTERN, f))
     processed_excels = [e for e in all_excels if e not in processed]
 
     if processed_excels:
-        print(f"  Excel datotek skupno: {len(all_excels)}")
-        print(f"  Novih (za obdelavo): {len(processed_excels)}")
+        print(f"  Total Excel files: {len(all_excels)}")
+        print(f"  New (to process): {len(processed_excels)}")
         for e in processed_excels:
             txns = parse_excel(os.path.join(DIR, e))
-            print(f"  ✓  {e}: {len(txns)} transakcij")
+            print(f"  ✓  {e}: {len(txns)} transactions")
             all_txns.extend(txns)
 
     if not all_txns:
@@ -313,7 +313,7 @@ def main():
         processed.update(new_pdfs)
         processed.update(processed_excels)
         save_processed(processed)
-        print("\n  ⚠  Nobene nove transakcije ni bilo mogoče najti (PDF ali Excel).")
+        print("\n  ⚠  No new transactions could be found (PDF or Excel).")
         return
 
     # 5 · Dedup
@@ -325,23 +325,23 @@ def main():
             skipped += 1
         else:
             to_add.append(t)
-    print(f"  ✓  Dedup: preskočenih {skipped} | za vnos {len(to_add)}")
+    print(f"  ✓  Dedup: skipped {skipped} | to insert {len(to_add)}")
 
     if not to_add:
         processed.update(new_pdfs)
         save_processed(processed)
-        print("\n  Vse transakcije iz novih PDF-jev so že v Google Excel-u.")
+        print("\n  All transactions from new PDFs are already in Google Sheets.")
         return
 
-    print("  ... vstavljanje v Google Sheets ...")
+    print("  ... inserting into Google Sheets ...")
     n_insert = insert_all_gsheet(ws, to_add)
-    print(f"  ✓  Vstavljenih vrstic: {n_insert}")
+    print(f"  ✓  Inserted rows: {n_insert}")
 
     processed.update(new_pdfs)
     save_processed(processed)
 
     print("\n" + "=" * 52)
-    print("  KONČANO!")
+    print("  FINISHED!")
     print("=" * 52 + "\n")
 
 if __name__ == "__main__":
